@@ -28,8 +28,10 @@ export default function Feed() {
   const [visibleCount, setVisibleCount] = useState(0);
   const [typing, setTyping] = useState(true);
   const [flashTyping, setFlashTyping] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const scrollRef = useRef(null);
   const storiesRef = useRef([]);
+  const initialAnimationDone = useRef(false);
 
   useEffect(() => {
     storiesRef.current = stories;
@@ -75,7 +77,6 @@ export default function Feed() {
       setFlashTyping(true);
       setTimeout(() => setFlashTyping(false), 900);
     } else {
-      // Keep whatever was already shown; clamp in case the list got shorter
       setVisibleCount((c) => Math.min(c, newStories.length));
     }
   }
@@ -101,7 +102,10 @@ export default function Feed() {
 
   useEffect(() => {
     if (!loaded) return;
-    if (visibleCount >= stories.length) return;
+    if (visibleCount >= stories.length) {
+      initialAnimationDone.current = true;
+      return;
+    }
     setTyping(true);
     const revealDelay = visibleCount === 0 ? 500 : 900;
     const timer = setTimeout(() => {
@@ -112,14 +116,16 @@ export default function Feed() {
   }, [visibleCount, loaded, stories]);
 
   useEffect(() => {
-  const el = scrollRef.current;
-  if (!el) return;
-  const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-  const isNearBottom = distanceFromBottom < 150;
-  if (isNearBottom) {
-    el.scrollTop = el.scrollHeight;
-  }
-}, [visibleCount, typing, flashTyping]);
+    const el = scrollRef.current;
+    if (!el) return;
+    // Never auto-scroll during the very first load — let the user land at the top
+    if (!initialAnimationDone.current) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const isNearBottom = distanceFromBottom < 150;
+    if (isNearBottom) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [visibleCount, typing, flashTyping]);
 
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "long",
@@ -191,24 +197,46 @@ export default function Feed() {
               {today}
             </div>
           </div>
-          <button
-  onClick={refreshStories}
-  title="Refresh feed"
-  style={{
-    border: "2px solid #111111",
-    background: "#fff",
-    borderRadius: 10,
-    width: 44,
-    height: 44,
-    fontSize: 20,
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  }}
->
-  ↻
-</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => setAboutOpen(true)}
+              title="What is this?"
+              style={{
+                border: "none",
+                background: "#111111",
+                color: "#ffffff",
+                borderRadius: "50%",
+                width: 44,
+                height: 44,
+                fontSize: 18,
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              ?
+            </button>
+            <button
+              onClick={refreshStories}
+              title="Refresh feed"
+              style={{
+                border: "2px solid #111111",
+                background: "#fff",
+                borderRadius: 10,
+                width: 44,
+                height: 44,
+                fontSize: 20,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              ↻
+            </button>
+          </div>
         </div>
 
         <div
@@ -240,6 +268,66 @@ export default function Feed() {
             news, but make it texting
           </div>
         </div>
+
+        {aboutOpen && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.4)",
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "center",
+              zIndex: 50,
+            }}
+            onClick={() => setAboutOpen(false)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "100%",
+                maxWidth: 420,
+                background: "#ffffff",
+                borderTop: "2.5px solid #111111",
+                borderRadius: "16px 16px 0 0",
+                padding: "18px 18px 28px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 14,
+              }}
+            >
+              <div style={{ fontSize: 15, lineHeight: 1.55, color: "#111111" }}>
+                news feed via texting for those who get a dopamine hit from seeing
+                new text messages and want to know what's happening around the
+                world but don't want to click headlines or subscribe to a
+                newsletter bc that's still too much
+              </div>
+              <div style={{ fontSize: 15, lineHeight: 1.55, color: "#111111" }}>
+                i haven't thought about what type of news i want to summarize so
+                it'll be whatever i want for now
+              </div>
+              <div style={{ fontSize: 15, lineHeight: 1.55, color: "#111111" }}>
+                this refreshes every morning at 12am ET
+              </div>
+              <button
+                onClick={() => setAboutOpen(false)}
+                style={{
+                  border: "2px solid #111111",
+                  background: "#111111",
+                  color: "#fff",
+                  borderRadius: 10,
+                  padding: "10px 0",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  marginTop: 4,
+                }}
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
