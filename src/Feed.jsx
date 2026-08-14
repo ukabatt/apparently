@@ -161,7 +161,7 @@ export default function Feed() {
           width: "100%",
           maxWidth: 420,
           background: "#ffffff",
-          height: "100vh",
+          height: "100dvh",
           display: "flex",
           flexDirection: "column",
           boxShadow: "0 0 40px rgba(0,0,0,0.08)",
