@@ -112,10 +112,14 @@ export default function Feed() {
   }, [visibleCount, loaded, stories]);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [visibleCount, typing, flashTyping]);
+  const el = scrollRef.current;
+  if (!el) return;
+  const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+  const isNearBottom = distanceFromBottom < 150;
+  if (isNearBottom) {
+    el.scrollTop = el.scrollHeight;
+  }
+}, [visibleCount, typing, flashTyping]);
 
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "long",
