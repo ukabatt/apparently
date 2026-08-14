@@ -197,46 +197,26 @@ export default function Feed() {
               {today}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={() => setAboutOpen(true)}
-              title="What is this?"
-              style={{
-                border: "none",
-                background: "#111111",
-                color: "#ffffff",
-                borderRadius: "50%",
-                width: 44,
-                height: 44,
-                fontSize: 18,
-                fontWeight: 700,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              ?
-            </button>
-            <button
-              onClick={refreshStories}
-              title="Refresh feed"
-              style={{
-                border: "2px solid #111111",
-                background: "#fff",
-                borderRadius: 10,
-                width: 44,
-                height: 44,
-                fontSize: 20,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              ↻
-            </button>
-          </div>
+          <button
+            onClick={refreshStories}
+            title="Refresh feed"
+            style={{
+              border: "2px solid #111111",
+              background: "#fff",
+              borderRadius: 10,
+              width: 44,
+              height: 44,
+              padding: 0,
+              fontSize: 22,
+              lineHeight: 1,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            ↻
+          </button>
         </div>
 
         <div
@@ -255,9 +235,18 @@ export default function Feed() {
           )}
         </div>
 
-        <div style={{ borderTop: "2.5px solid #111111", padding: "12px 16px" }}>
+        <div
+          style={{
+            borderTop: "2.5px solid #111111",
+            padding: "12px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
           <div
             style={{
+              flex: 1,
               border: "2px solid #d8d8d8",
               borderRadius: 18,
               padding: "9px 14px",
@@ -267,6 +256,29 @@ export default function Feed() {
           >
             news, but make it texting
           </div>
+          <button
+            onClick={() => setAboutOpen(true)}
+            title="What is this?"
+            style={{
+              border: "none",
+              background: "#111111",
+              color: "#ffffff",
+              borderRadius: "50%",
+              width: 32,
+              height: 32,
+              padding: 0,
+              fontSize: 14,
+              lineHeight: 1,
+              fontWeight: 700,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            ?
+          </button>
         </div>
 
         {aboutOpen && (
