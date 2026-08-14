@@ -1,3 +1,4 @@
+// Admin.jsx
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabaseClient";
 
@@ -10,11 +11,8 @@ function etDateString(date) {
   }).format(date);
 }
 
-function parseAdminText(raw) {
-  return raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+function formatDisplayTime(date) {
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 export default function Admin() {
@@ -24,10 +22,12 @@ export default function Admin() {
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
 
-  const [adminText, setAdminText] = useState("");
-  const [saveStatus, setSaveStatus] = useState("");
+  const [todayStories, setTodayStories] = useState([]);
   const [loadingStories, setLoadingStories] = useState(true);
-  const textareaRef = useRef(null);
+  const [inputText, setInputText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const scrollRef = useRef(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -42,31 +42,41 @@ export default function Admin() {
 
   useEffect(() => {
     if (!session) return;
-    (async () => {
-      const { data, error } = await supabase
-        .from("stories")
-        .select("*")
-        .order("position", { ascending: true });
-
-      if (!error && data) {
-        // Only show today's stories — anything from a previous day starts blank
-        const today = etDateString(new Date());
-        const todaysStories = data.filter(
-          (s) => etDateString(new Date(s.created_at)) === today
-        );
-        setAdminText(todaysStories.map((s) => s.text).join("\n"));
-      }
-      setLoadingStories(false);
-    })();
+    loadTodayStories();
   }, [session]);
 
-  // Auto-grow the textarea to fit its content
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = textareaRef.current.scrollHeight + "px";
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [adminText, loadingStories]);
+  }, [todayStories]);
+
+  async function loadTodayStories() {
+    setLoadingStories(true);
+    const { data, error } = await supabase
+      .from("stories")
+      .select("*")
+      .order("position", { ascending: true });
+
+    if (error) {
+      setLoadingStories(false);
+      return;
+    }
+
+    const today = etDateString(new Date());
+    const todays = (data || []).filter(
+      (s) => etDateString(new Date(s.created_at)) === today
+    );
+
+    // If everything in the table is stale (from a previous day), clean it up
+    // so it's a blank slate — no leftover clutter to manage.
+    if (todays.length === 0 && data && data.length > 0) {
+      await supabase.from("stories").delete().neq("id", 0);
+    }
+
+    setTodayStories(todays);
+    setLoadingStories(false);
+  }
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -79,55 +89,42 @@ export default function Admin() {
     await supabase.auth.signOut();
   }
 
-  async function saveStories() {
-    const newLines = parseAdminText(adminText);
-    setSaveStatus("Saving...");
+  async function sendMessage() {
+    const text = inputText.trim();
+    if (!text || sending) return;
+    setSending(true);
+    setErrorMsg("");
 
-    // Pull whatever's currently in the table so we can preserve original
-    // send times for lines that already existed today.
-    const { data: existing, error: fetchError } = await supabase
+    const nextPosition = todayStories.length;
+    const { data, error } = await supabase
       .from("stories")
-      .select("*");
-    if (fetchError) {
-      setSaveStatus("Save failed: " + fetchError.message);
+      .insert({ text, position: nextPosition })
+      .select()
+      .single();
+
+    setSending(false);
+
+    if (error) {
+      setErrorMsg("Couldn't send: " + error.message);
       return;
     }
 
-    const today = etDateString(new Date());
-    const existingToday = (existing || []).filter(
-      (s) => etDateString(new Date(s.created_at)) === today
-    );
-    const existingByText = new Map(existingToday.map((s) => [s.text, s]));
+    setTodayStories((prev) => [...prev, data]);
+    setInputText("");
+  }
 
-    // Clear everything (including any stale rows from a previous day)
-    const { error: delError } = await supabase.from("stories").delete().neq("id", 0);
-    if (delError) {
-      setSaveStatus("Save failed: " + delError.message);
-      return;
+  async function deleteMessage(id) {
+    const { error } = await supabase.from("stories").delete().eq("id", id);
+    if (!error) {
+      setTodayStories((prev) => prev.filter((s) => s.id !== id));
     }
+  }
 
-    if (newLines.length === 0) {
-      setSaveStatus("Cleared! Feed will show the fallback message.");
-      return;
+  function handleKeyDown(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
     }
-
-    // Lines that already existed today keep their original timestamp;
-    // brand new lines get "sent" right now.
-    const finalRows = newLines.map((text, i) => {
-      const match = existingByText.get(text);
-      return {
-        text,
-        position: i,
-        created_at: match ? match.created_at : new Date().toISOString(),
-      };
-    });
-
-    const { error: insError } = await supabase.from("stories").insert(finalRows);
-    if (insError) {
-      setSaveStatus("Save failed: " + insError.message);
-      return;
-    }
-    setSaveStatus("Saved! Live on the feed now.");
   }
 
   if (checkingSession) {
@@ -188,8 +185,13 @@ export default function Admin() {
           justifyContent: "space-between",
         }}
       >
-        <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.3 }}>
-          Edit today's stories
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.3 }}>
+            Apparently Daily
+          </div>
+          <div style={{ fontSize: 12.5, color: "#8a8a8a", fontWeight: 500 }}>
+            Admin
+          </div>
         </div>
         <button onClick={handleLogout} style={secondaryButtonStyle}>
           Log out
@@ -197,50 +199,152 @@ export default function Admin() {
       </div>
 
       <div
+        ref={scrollRef}
         className="message-thread"
-        style={{ flex: 1, overflowY: "auto", padding: "18px 16px 24px" }}
+        style={{ flex: 1, padding: "18px 16px 24px", overflowY: "auto" }}
       >
-        <div style={{ fontSize: 12, color: "#8a8a8a", lineHeight: 1.4, marginBottom: 12 }}>
-          One message per line. Timestamps are automatic — new lines get
-          today's current time when you publish; lines you keep as-is hold
-          onto their original send time.
-        </div>
-        {loadingStories ? (
-          <div>Loading stories...</div>
-        ) : (
-          <textarea
-            ref={textareaRef}
-            value={adminText}
-            onChange={(e) => setAdminText(e.target.value)}
-            style={{
-              width: "100%",
-              minHeight: 120,
-              border: "2px solid #111111",
-              borderRadius: 10,
-              padding: 12,
-              fontSize: 14,
-              fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-              resize: "none",
-              overflow: "hidden",
-              color: "#111111",
-              boxSizing: "border-box",
-              display: "block",
-            }}
-          />
+        {loadingStories && (
+          <div style={{ color: "#9a9a9a", fontSize: 14 }}>Loading...</div>
         )}
-        {saveStatus && (
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#111111", marginTop: 12 }}>
-            {saveStatus}
+        {!loadingStories && todayStories.length === 0 && (
+          <div style={{ color: "#9a9a9a", fontSize: 14, textAlign: "center", marginTop: 40 }}>
+            Nothing sent yet today. Type below to publish your first story.
           </div>
+        )}
+        {todayStories.map((msg) => (
+          <SentBubble
+            key={msg.id}
+            text={msg.text}
+            time={formatDisplayTime(new Date(msg.created_at))}
+            onDelete={() => deleteMessage(msg.id)}
+          />
+        ))}
+        {errorMsg && (
+          <div style={{ color: "#c0392b", fontSize: 13, marginTop: 8 }}>{errorMsg}</div>
         )}
       </div>
 
-      <div style={{ borderTop: "2.5px solid #111111", padding: "12px 16px" }}>
-        <button onClick={saveStories} style={{ ...primaryButtonStyle, width: "100%" }}>
-          Save & publish
+      <div
+        style={{
+          borderTop: "2.5px solid #111111",
+          padding: "12px 16px",
+          display: "flex",
+          alignItems: "flex-end",
+          gap: 10,
+        }}
+      >
+        <textarea
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Type a story..."
+          rows={1}
+          style={{
+            flex: 1,
+            border: "2px solid #d8d8d8",
+            borderRadius: 18,
+            padding: "9px 14px",
+            fontSize: 14,
+            fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+            resize: "none",
+            maxHeight: 120,
+            color: "#111111",
+          }}
+        />
+        <button
+          onClick={sendMessage}
+          disabled={sending || !inputText.trim()}
+          style={{
+            border: "none",
+            background: inputText.trim() ? "#111111" : "#d8d8d8",
+            color: "#ffffff",
+            borderRadius: "50%",
+            width: 40,
+            height: 40,
+            fontSize: 18,
+            lineHeight: 1,
+            cursor: inputText.trim() ? "pointer" : "default",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          ↑
         </button>
       </div>
     </Frame>
+  );
+}
+
+function SentBubble({ text, time, onDelete }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "flex-end",
+        gap: 6,
+        marginBottom: 10,
+      }}
+    >
+      <button
+        onClick={onDelete}
+        title="Delete"
+        style={{
+          border: "1px solid #d8d8d8",
+          background: "#fff",
+          color: "#9a9a9a",
+          borderRadius: "50%",
+          width: 22,
+          height: 22,
+          fontSize: 12,
+          lineHeight: 1,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          marginBottom: 4,
+        }}
+      >
+        ×
+      </button>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          maxWidth: "78%",
+        }}
+      >
+        <div
+          style={{
+            border: "2.5px solid #111111",
+            borderRadius: "20px 20px 6px 20px",
+            padding: "10px 15px",
+            background: "#111111",
+            color: "#ffffff",
+            fontSize: 15.5,
+            lineHeight: 1.38,
+            fontFamily:
+              "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          }}
+        >
+          {text}
+        </div>
+        <div
+          style={{
+            fontSize: 11,
+            color: "#9a9a9a",
+            marginTop: 4,
+            marginRight: 6,
+          }}
+        >
+          {time}
+        </div>
+      </div>
+    </div>
   );
 }
 
