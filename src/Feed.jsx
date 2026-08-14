@@ -1,10 +1,11 @@
+// Feed.jsx
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabaseClient";
 import { Bubble, TypingIndicator } from "./Bubbles.jsx";
 
 const FALLBACK_TEXT =
   "sorry don't have anything right now. Either dying at work or living my best life";
-const GROUP_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+const GROUP_THRESHOLD_MS = 5 * 60 * 1000;
 
 function etDateString(date) {
   return new Intl.DateTimeFormat("en-US", {
@@ -19,8 +20,6 @@ function formatDisplayTime(date) {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-// Only show a timestamp under a bubble when there's a meaningful gap
-// since the previous message — like real texting threads.
 function withGroupedTimes(list) {
   let lastShown = null;
   return list.map((s) => {
@@ -57,16 +56,12 @@ export default function Feed() {
 
     if (!error && data && data.length > 0) {
       const today = etDateString(new Date());
-      const mostRecent = data.reduce((latest, s) =>
-        new Date(s.created_at) > new Date(latest.created_at) ? s : latest
+      const todaysRows = data.filter(
+        (s) => etDateString(new Date(s.created_at)) === today
       );
-      const isFromToday = etDateString(new Date(mostRecent.created_at)) === today;
-      if (isFromToday) {
-        return withGroupedTimes(data);
+      if (todaysRows.length > 0) {
+        return withGroupedTimes(todaysRows);
       }
-      return [
-        { id: "fallback", text: FALLBACK_TEXT, time: formatDisplayTime(new Date()) },
-      ];
     }
     return [
       { id: "fallback", text: FALLBACK_TEXT, time: formatDisplayTime(new Date()) },
