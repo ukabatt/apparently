@@ -1,21 +1,20 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabaseClient";
 
+function etDateString(date) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 function parseAdminText(raw) {
   return raw
     .split("\n")
     .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line, i) => {
-      const [text, time] = line.split("|").map((s) => s && s.trim());
-      return { text, time: time || "", position: i };
-    });
-}
-
-function storiesToAdminText(stories) {
-  return stories
-    .map((s) => (s.time ? `${s.text} | ${s.time}` : s.text))
-    .join("\n");
+    .filter(Boolean);
 }
 
 export default function Admin() {
@@ -48,14 +47,20 @@ export default function Admin() {
         .from("stories")
         .select("*")
         .order("position", { ascending: true });
+
       if (!error && data) {
-        setAdminText(storiesToAdminText(data));
+        // Only show today's stories — anything from a previous day starts blank
+        const today = etDateString(new Date());
+        const todaysStories = data.filter(
+          (s) => etDateString(new Date(s.created_at)) === today
+        );
+        setAdminText(todaysStories.map((s) => s.text).join("\n"));
       }
       setLoadingStories(false);
     })();
   }, [session]);
 
-  // Auto-grow the textarea to fit its content, so it never scrolls internally
+  // Auto-grow the textarea to fit its content
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -75,23 +80,49 @@ export default function Admin() {
   }
 
   async function saveStories() {
-    const newStories = parseAdminText(adminText);
+    const newLines = parseAdminText(adminText);
     setSaveStatus("Saving...");
 
-    // Always clear existing rows first
+    // Pull whatever's currently in the table so we can preserve original
+    // send times for lines that already existed today.
+    const { data: existing, error: fetchError } = await supabase
+      .from("stories")
+      .select("*");
+    if (fetchError) {
+      setSaveStatus("Save failed: " + fetchError.message);
+      return;
+    }
+
+    const today = etDateString(new Date());
+    const existingToday = (existing || []).filter(
+      (s) => etDateString(new Date(s.created_at)) === today
+    );
+    const existingByText = new Map(existingToday.map((s) => [s.text, s]));
+
+    // Clear everything (including any stale rows from a previous day)
     const { error: delError } = await supabase.from("stories").delete().neq("id", 0);
     if (delError) {
       setSaveStatus("Save failed: " + delError.message);
       return;
     }
 
-    // If there's nothing to publish, leave it empty — the feed will show the fallback message
-    if (newStories.length === 0) {
+    if (newLines.length === 0) {
       setSaveStatus("Cleared! Feed will show the fallback message.");
       return;
     }
 
-    const { error: insError } = await supabase.from("stories").insert(newStories);
+    // Lines that already existed today keep their original timestamp;
+    // brand new lines get "sent" right now.
+    const finalRows = newLines.map((text, i) => {
+      const match = existingByText.get(text);
+      return {
+        text,
+        position: i,
+        created_at: match ? match.created_at : new Date().toISOString(),
+      };
+    });
+
+    const { error: insError } = await supabase.from("stories").insert(finalRows);
     if (insError) {
       setSaveStatus("Save failed: " + insError.message);
       return;
@@ -170,11 +201,9 @@ export default function Admin() {
         style={{ flex: 1, overflowY: "auto", padding: "18px 16px 24px" }}
       >
         <div style={{ fontSize: 12, color: "#8a8a8a", lineHeight: 1.4, marginBottom: 12 }}>
-          One message per line. Add a time after a "|" (optional):
-          <br />
-          <span style={{ fontStyle: "italic" }}>
-            apparently the Fed held rates steady | 8:02 AM
-          </span>
+          One message per line. Timestamps are automatic — new lines get
+          today's current time when you publish; lines you keep as-is hold
+          onto their original send time.
         </div>
         {loadingStories ? (
           <div>Loading stories...</div>
