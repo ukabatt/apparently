@@ -188,20 +188,23 @@ export default function Feed() {
             </div>
           </div>
           <button
-            onClick={refreshStories}
-            title="Refresh feed"
-            style={{
-              border: "2px solid #111111",
-              background: "#fff",
-              borderRadius: 8,
-              width: 32,
-              height: 32,
-              fontSize: 14,
-              cursor: "pointer",
-            }}
-          >
-            ↻
-          </button>
+  onClick={refreshStories}
+  title="Refresh feed"
+  style={{
+    border: "2px solid #111111",
+    background: "#fff",
+    borderRadius: 10,
+    width: 44,
+    height: 44,
+    fontSize: 20,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  }}
+>
+  ↻
+</button>
         </div>
 
         <div
