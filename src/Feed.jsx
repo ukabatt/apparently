@@ -126,7 +126,7 @@ export default function Feed() {
   return (
     <div
       style={{
-        height: "100vh",
+        height: "100dvh",
         background: "#ececec",
         display: "flex",
         justifyContent: "center",
