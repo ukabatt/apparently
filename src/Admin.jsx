@@ -219,7 +219,7 @@ function Frame({ children }) {
   return (
     <div
       style={{
-        height: "100vh",
+        height: "100dvh",
         background: "#ececec",
         display: "flex",
         justifyContent: "center",
