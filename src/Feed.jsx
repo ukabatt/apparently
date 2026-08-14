@@ -4,6 +4,7 @@ import { Bubble, TypingIndicator } from "./Bubbles.jsx";
 
 const FALLBACK_TEXT =
   "sorry don't have anything right now. Either dying at work or living my best life";
+const GROUP_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
 function etDateString(date) {
   return new Intl.DateTimeFormat("en-US", {
@@ -14,12 +15,23 @@ function etDateString(date) {
   }).format(date);
 }
 
-function etTimeString(date) {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
+function formatDisplayTime(date) {
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+// Only show a timestamp under a bubble when there's a meaningful gap
+// since the previous message — like real texting threads.
+function withGroupedTimes(list) {
+  let lastShown = null;
+  return list.map((s) => {
+    const created = new Date(s.created_at || Date.now());
+    let time = "";
+    if (!lastShown || created - lastShown >= GROUP_THRESHOLD_MS) {
+      time = formatDisplayTime(created);
+      lastShown = created;
+    }
+    return { ...s, time };
+  });
 }
 
 export default function Feed() {
@@ -49,14 +61,18 @@ export default function Feed() {
         new Date(s.created_at) > new Date(latest.created_at) ? s : latest
       );
       const isFromToday = etDateString(new Date(mostRecent.created_at)) === today;
-      return isFromToday
-        ? data
-        : [{ id: "fallback", text: FALLBACK_TEXT, time: etTimeString(new Date()) }];
+      if (isFromToday) {
+        return withGroupedTimes(data);
+      }
+      return [
+        { id: "fallback", text: FALLBACK_TEXT, time: formatDisplayTime(new Date()) },
+      ];
     }
-    return [{ id: "fallback", text: FALLBACK_TEXT, time: etTimeString(new Date()) }];
+    return [
+      { id: "fallback", text: FALLBACK_TEXT, time: formatDisplayTime(new Date()) },
+    ];
   }
 
-  // Initial load: fetch and type everything in from scratch
   async function loadInitial() {
     const newStories = await fetchStories();
     setStories(newStories);
@@ -64,8 +80,6 @@ export default function Feed() {
     setVisibleCount(0);
   }
 
-  // Refresh: fetch fresh data, but keep existing bubbles as-is.
-  // Only newly added stories get typed in; if nothing changed, just a quick typing flash.
   async function refreshStories() {
     const newStories = await fetchStories();
     const prevList = storiesRef.current;
@@ -118,7 +132,6 @@ export default function Feed() {
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    // Never auto-scroll during the very first load — let the user land at the top
     if (!initialAnimationDone.current) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     const isNearBottom = distanceFromBottom < 150;
