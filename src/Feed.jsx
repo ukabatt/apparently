@@ -230,7 +230,7 @@ export default function Feed() {
               color: "#b4b4b4",
             }}
           >
-            iMessage
+            news, but make it texting
           </div>
         </div>
       </div>
