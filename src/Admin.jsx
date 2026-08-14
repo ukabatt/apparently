@@ -27,6 +27,8 @@ export default function Admin() {
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState("");
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -68,8 +70,6 @@ export default function Admin() {
       (s) => etDateString(new Date(s.created_at)) === today
     );
 
-    // If everything in the table is stale (from a previous day), clean it up
-    // so it's a blank slate — no leftover clutter to manage.
     if (todays.length === 0 && data && data.length > 0) {
       await supabase.from("stories").delete().neq("id", 0);
     }
@@ -113,11 +113,48 @@ export default function Admin() {
     setInputText("");
   }
 
+  function requestDelete(id) {
+    const confirmed = window.confirm("Delete this message? This can't be undone.");
+    if (confirmed) {
+      deleteMessage(id);
+    }
+  }
+
   async function deleteMessage(id) {
     const { error } = await supabase.from("stories").delete().eq("id", id);
     if (!error) {
       setTodayStories((prev) => prev.filter((s) => s.id !== id));
     }
+  }
+
+  function startEdit(msg) {
+    setEditingId(msg.id);
+    setEditText(msg.text);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditText("");
+  }
+
+  async function saveEdit(id) {
+    const newText = editText.trim();
+    if (!newText) {
+      cancelEdit();
+      return;
+    }
+    const { error } = await supabase
+      .from("stories")
+      .update({ text: newText })
+      .eq("id", id);
+
+    if (!error) {
+      setTodayStories((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, text: newText } : s))
+      );
+    }
+    setEditingId(null);
+    setEditText("");
   }
 
   function handleKeyDown(e) {
@@ -211,14 +248,25 @@ export default function Admin() {
             Nothing sent yet today. Type below to publish your first story.
           </div>
         )}
-        {todayStories.map((msg) => (
-          <SentBubble
-            key={msg.id}
-            text={msg.text}
-            time={formatDisplayTime(new Date(msg.created_at))}
-            onDelete={() => deleteMessage(msg.id)}
-          />
-        ))}
+        {todayStories.map((msg) =>
+          editingId === msg.id ? (
+            <EditingBubble
+              key={msg.id}
+              text={editText}
+              onChange={setEditText}
+              onSave={() => saveEdit(msg.id)}
+              onCancel={cancelEdit}
+            />
+          ) : (
+            <SentBubble
+              key={msg.id}
+              text={msg.text}
+              time={formatDisplayTime(new Date(msg.created_at))}
+              onEdit={() => startEdit(msg)}
+              onDelete={() => requestDelete(msg.id)}
+            />
+          )
+        )}
         {errorMsg && (
           <div style={{ color: "#c0392b", fontSize: 13, marginTop: 8 }}>{errorMsg}</div>
         )}
@@ -277,12 +325,12 @@ export default function Admin() {
   );
 }
 
-function SentBubble({ text, time, onDelete }) {
+function SentBubble({ text, time, onEdit, onDelete }) {
   return (
     <div
       style={{
         display: "flex",
-        alignItems: "flex-end",
+        alignItems: "center",
         justifyContent: "flex-end",
         gap: 6,
         marginBottom: 10,
@@ -305,17 +353,18 @@ function SentBubble({ text, time, onDelete }) {
           alignItems: "center",
           justifyContent: "center",
           flexShrink: 0,
-          marginBottom: 4,
         }}
       >
         ×
       </button>
       <div
+        onClick={onEdit}
         style={{
           display: "flex",
           flexDirection: "column",
           alignItems: "flex-end",
           maxWidth: "78%",
+          cursor: "pointer",
         }}
       >
         <div
@@ -343,6 +392,48 @@ function SentBubble({ text, time, onDelete }) {
         >
           {time}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function EditingBubble({ text, onChange, onSave, onCancel }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-end",
+        gap: 6,
+        marginBottom: 10,
+      }}
+    >
+      <textarea
+        autoFocus
+        value={text}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          width: "78%",
+          border: "2.5px solid #111111",
+          borderRadius: "20px 20px 6px 20px",
+          padding: "10px 15px",
+          background: "#ffffff",
+          color: "#111111",
+          fontSize: 15.5,
+          lineHeight: 1.38,
+          fontFamily:
+            "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          resize: "none",
+          minHeight: 60,
+        }}
+      />
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={onCancel} style={secondaryButtonStyle}>
+          Cancel
+        </button>
+        <button onClick={onSave} style={primaryButtonStyle}>
+          Save
+        </button>
       </div>
     </div>
   );
@@ -424,8 +515,8 @@ const primaryButtonStyle = {
   background: "#111111",
   color: "#fff",
   borderRadius: 10,
-  padding: "10px 0",
-  fontSize: 14,
+  padding: "8px 16px",
+  fontSize: 13,
   fontWeight: 700,
   cursor: "pointer",
 };
@@ -435,7 +526,7 @@ const secondaryButtonStyle = {
   background: "#fff",
   color: "#111111",
   borderRadius: 8,
-  padding: "6px 12px",
+  padding: "8px 16px",
   fontSize: 13,
   fontWeight: 700,
   cursor: "pointer",
